@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+streamlit>=1.40
+timm
+pandas
+Pillow
+scikit-learn
+matplotlib
+altair

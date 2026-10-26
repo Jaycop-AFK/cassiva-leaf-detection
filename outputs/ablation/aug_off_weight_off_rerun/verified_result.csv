@@ -1,0 +1,2 @@
+experiment,augmentation,class_weighting,best_epoch,best_val_macro_f1,best_val_accuracy,best_val_loss,training_minutes,checkpoint_verified
+aug_off_weight_off,False,False,10,0.8882079720802727,0.9231433506044905,0.405101417414265,26.251050182183583,True
