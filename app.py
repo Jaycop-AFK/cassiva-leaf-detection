@@ -182,21 +182,21 @@ def show_probability_comparison(results):
         y=alt.Y("คลาส:N", sort=[THAI_NAMES[x].split(" (")[0] for x in CLASS_NAMES], title=None),
         x=alt.X("ความมั่นใจ:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(format="%"), title=None),
         yOffset="โมเดล:N",
-        color=alt.Color("โมเดล:N", scale=alt.Scale(domain=list(MODELS), range=["#60a5fa", "#34d399"]), legend=alt.Legend(orient="top", title=None)),
+        color=alt.Color("โมเดล:N", scale=alt.Scale(domain=list(MODELS), range=["#60a5fa", "#34d399", "#f59e0b"]), legend=alt.Legend(orient="top", title=None)),
         tooltip=["โมเดล:N", "คลาส:N", alt.Tooltip("ความมั่นใจ:Q", format=".2%")],
     ).properties(height=220)
     st.altair_chart(chart, width="stretch")
 
 
 st.title("🌿 Cassava Leaf Disease Classification")
-st.caption("EfficientNet-B0 / ResNet18 | 4 classes | Macro-F1 เป็น metric หลัก")
+st.caption("EfficientNet-B0 / ResNet18 / MobileNetV3-Large | 4 classes | Macro-F1 เป็น metric หลัก")
 
 tab_predict, tab_report, tab_compare = st.tabs(["🖼️ ทดสอบรูป", "📊 กราฟและผลประเมิน", "⚖️ เปรียบเทียบโมเดล"])
 
 with tab_predict:
     st.info("อัปโหลดภาพใบมันสำปะหลัง 1 ภาพ เพื่อให้โมเดลทำนาย")
-    mode = st.radio("โหมดทดสอบ", ["เลือกโมเดลเดียว", "เปรียบเทียบทั้งสองโมเดล"], horizontal=True)
-    selected_model = st.selectbox("โมเดลสำหรับทำนาย", list(MODELS), index=1, disabled=mode == "เปรียบเทียบทั้งสองโมเดล")
+    mode = st.radio("โหมดทดสอบ", ["เลือกโมเดลเดียว", "เปรียบเทียบทุกโมเดล"], horizontal=True)
+    selected_model = st.selectbox("โมเดลสำหรับทำนาย", list(MODELS), index=1, disabled=mode == "เปรียบเทียบทุกโมเดล")
     uploaded = st.file_uploader("เลือกไฟล์ภาพ", type=["jpg", "jpeg", "png", "webp"])
     if uploaded is not None:
         image = Image.open(uploaded).convert("RGB")
@@ -205,7 +205,7 @@ with tab_predict:
             st.image(image, caption=f"ภาพต้นฉบับ ({image.width} × {image.height})", width="stretch")
         with right:
             st.subheader("ผลการวิเคราะห์")
-            names = list(MODELS) if mode == "เปรียบเทียบทั้งสองโมเดล" else [selected_model]
+            names = list(MODELS) if mode == "เปรียบเทียบทุกโมเดล" else [selected_model]
             results = {}
             for name in names:
                 with st.spinner(f"กำลังทำนายด้วย {name}..."):
@@ -214,12 +214,12 @@ with tab_predict:
             for card, name in zip(cards, names):
                 with card:
                     show_prediction(name, results[name])
-            if len(results) == 2:
+            if len(results) >= 2:
                 labels = [result[0] for result in results.values()]
-                if labels[0] == labels[1]:
-                    st.caption("✓ ทั้งสองโมเดลทำนายคลาสเดียวกัน")
+                if len(set(labels)) == 1:
+                    st.caption("✓ ทุกโมเดลทำนายคลาสเดียวกัน")
                 else:
-                    st.warning("สองโมเดลให้ผลต่างกัน — ควรตรวจสอบอาการในภาพเพิ่มเติม")
+                    st.warning("โมเดลให้ผลต่างกัน — ควรตรวจสอบอาการในภาพเพิ่มเติม")
             st.caption("Confidence = ความมั่นใจของภาพนี้ · Accuracy / Macro-F1 = คะแนนรวมจากชุด Test")
             show_probability_comparison(results)
 

@@ -18,6 +18,12 @@ MODELS = {
         "history": ROOT / "outputs/training_history_resnet18.csv",
         "evaluation": ROOT / "outputs/evaluation_resnet18",
     },
+    "MobileNetV3-Large": {
+        "architecture": "mobilenetv3_large_100",
+        "checkpoint": ROOT / "outputs/checkpoints/mobilenetv3_large_100_best.pt",
+        "history": ROOT / "outputs/training_history_mobilenetv3_large_100.csv",
+        "evaluation": ROOT / "outputs/evaluation_mobilenetv3_large_100",
+    },
 }
 
 

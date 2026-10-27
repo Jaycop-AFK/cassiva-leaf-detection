@@ -1,6 +1,6 @@
 # Cassava Leaf Disease Classification
 
-Streamlit demo comparing EfficientNet-B0 and ResNet18 on four cassava leaf classes.
+Streamlit demo comparing EfficientNet-B0, ResNet18, and MobileNetV3-Large on four cassava leaf classes.
 Macro-F1 is the primary evaluation metric. The trained checkpoints use `cbs`
 for Brown Leaf Spot (called `bls` in the project plan).
 
@@ -24,4 +24,4 @@ Inference checkpoints contain the original model weights without optimizer state
 - Python: `3.12`
 - Dependencies: root `requirements.txt`
 
-Evaluation CSVs, charts, and both inference checkpoints are included in the repository.
+Evaluation CSVs, charts, and all three inference checkpoints are included in the repository.
