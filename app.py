@@ -111,18 +111,22 @@ def show_charts(model_name):
     st.subheader("กราฟการฝึกโมเดล")
     if HISTORY.exists():
         history = pd.read_csv(HISTORY)
-        left, right = st.columns(2)
-        with left:
+        chart_data = history.set_index("epoch")
+        loss_col, accuracy_col, f1_col = st.columns(3)
+        with loss_col:
             st.caption("Loss")
-            st.line_chart(history.set_index("epoch")[['train_loss', 'val_loss']], width="stretch")
-        with right:
-            st.caption("Accuracy และ Macro-F1")
-            st.line_chart(history.set_index("epoch")[['train_accuracy', 'val_accuracy', 'val_macro_f1']], width="stretch")
+            st.line_chart(chart_data[["train_loss", "val_loss"]].rename(columns={"train_loss": "Train", "val_loss": "Validation"}), width="stretch")
+        with accuracy_col:
+            st.caption("Accuracy")
+            st.line_chart(chart_data[["train_accuracy", "val_accuracy"]].rename(columns={"train_accuracy": "Train", "val_accuracy": "Validation"}), width="stretch")
+        with f1_col:
+            st.caption("Validation Macro-F1")
+            st.line_chart(chart_data[["val_macro_f1"]].rename(columns={"val_macro_f1": "Macro-F1"}), width="stretch")
 
         f1_cols = [c for c in history.columns if c.endswith("_f1")]
         if f1_cols:
             st.caption("F1 รายคลาสต่อ epoch")
-            st.line_chart(history.set_index("epoch")[f1_cols], width="stretch")
+            st.line_chart(chart_data[f1_cols], width="stretch")
     else:
         st.warning("ไม่พบไฟล์ history.csv")
 
