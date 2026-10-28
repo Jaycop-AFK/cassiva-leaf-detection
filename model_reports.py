@@ -61,6 +61,8 @@ def export_reports():
         for ax, columns, title in zip(axes, [("train_loss", "val_loss"), ("train_accuracy", "val_accuracy"), ("val_macro_f1",)], ["Loss", "Accuracy", "Validation Macro-F1"]):
             for column in columns:
                 ax.plot(history.epoch, history[column], marker="o", label=column)
+                for epoch, value in zip(history.epoch, history[column]):
+                    ax.annotate(f"{value:.3f}", (epoch, value), textcoords="offset points", xytext=(0, 5), ha="center", fontsize=6)
             ax.set(title=title, xlabel="Epoch")
             ax.grid(alpha=0.25)
             ax.legend()
@@ -69,9 +71,13 @@ def export_reports():
         fig.savefig(REPORT_DIR / f"learning_curve_{config['architecture']}.png", dpi=200)
         plt.close(fig)
     fig, ax = plt.subplots(figsize=(9, 5))
-    table.set_index("Model")[["Accuracy", "Macro Precision", "Macro Recall", "Macro-F1"]].plot.bar(ax=ax, rot=0)
-    ax.set(ylabel="Score", ylim=(0, 1), title="Model comparison - same held-out test set")
-    ax.legend(loc="lower right")
+    metrics = ["Accuracy", "Macro Precision", "Macro Recall", "Macro-F1"]
+    plotted = table.set_index("Model")[metrics].plot.bar(ax=ax, rot=0, stacked=False)
+    ax.set(ylabel="Score (0–1)", ylim=(0, 1), title="Model comparison - same held-out test set")
+    ax.grid(axis="y", alpha=0.25)
+    for container in plotted.containers:
+        ax.bar_label(container, fmt="%.4f", padding=3, fontsize=8)
+    ax.legend(title="Metric", loc="lower right")
     fig.tight_layout()
     fig.savefig(REPORT_DIR / "model_comparison.png", dpi=200)
     plt.close(fig)

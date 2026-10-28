@@ -13,6 +13,7 @@ import streamlit as st
 import torch
 import timm
 from PIL import Image
+from sklearn.metrics import confusion_matrix
 
 from dataset import CLASS_NAMES, eval_transform
 from model_reports import MODELS, REPORT_DIR, comparison_table
@@ -115,18 +116,25 @@ def show_charts(model_name):
         loss_col, accuracy_col, f1_col = st.columns(3)
         with loss_col:
             st.caption("Loss")
-            st.line_chart(chart_data[["train_loss", "val_loss"]].rename(columns={"train_loss": "Train", "val_loss": "Validation"}), width="stretch")
+            loss_view = chart_data[["train_loss", "val_loss"]].rename(columns={"train_loss": "Train", "val_loss": "Validation"})
+            st.line_chart(loss_view, width="stretch")
+            st.dataframe(loss_view.reset_index().round(4), width="stretch", hide_index=True)
         with accuracy_col:
             st.caption("Accuracy")
-            st.line_chart(chart_data[["train_accuracy", "val_accuracy"]].rename(columns={"train_accuracy": "Train", "val_accuracy": "Validation"}), width="stretch")
+            accuracy_view = chart_data[["train_accuracy", "val_accuracy"]].rename(columns={"train_accuracy": "Train", "val_accuracy": "Validation"})
+            st.line_chart(accuracy_view, width="stretch")
+            st.dataframe(accuracy_view.reset_index().round(4), width="stretch", hide_index=True)
         with f1_col:
             st.caption("Validation Macro-F1")
-            st.line_chart(chart_data[["val_macro_f1"]].rename(columns={"val_macro_f1": "Macro-F1"}), width="stretch")
+            f1_view = chart_data[["val_macro_f1"]].rename(columns={"val_macro_f1": "Macro-F1"})
+            st.line_chart(f1_view, width="stretch")
+            st.dataframe(f1_view.reset_index().round(4), width="stretch", hide_index=True)
 
         f1_cols = [c for c in history.columns if c.endswith("_f1")]
         if f1_cols:
             st.caption("F1 รายคลาสต่อ epoch")
             st.line_chart(chart_data[f1_cols], width="stretch")
+            st.dataframe(chart_data[f1_cols].reset_index().round(4), width="stretch", hide_index=True)
     else:
         st.warning("ไม่พบไฟล์ history.csv")
 
@@ -138,24 +146,56 @@ def show_charts(model_name):
         c1, c2 = st.columns(2)
         with c1:
             st.caption("Best validation Macro-F1")
-            st.bar_chart(view.set_index("experiment")[["best_val_macro_f1"]], width="stretch")
+            ablation_f1 = view.melt(id_vars="experiment", value_vars=["best_val_macro_f1"], var_name="Metric", value_name="Value")
+            chart = alt.Chart(ablation_f1).mark_bar().encode(
+                x=alt.X("experiment:N", title="Experiment", axis=alt.Axis(labelAngle=-25)),
+                y=alt.Y("Value:Q", title="Score", scale=alt.Scale(domain=[0, 1])),
+                color=alt.Color("Metric:N", legend=None),
+                tooltip=["experiment:N", alt.Tooltip("Value:Q", format=".4f")],
+            )
+            labels = alt.Chart(ablation_f1).mark_text(dy=-8).encode(x="experiment:N", y="Value:Q", text=alt.Text("Value:Q", format=".4f"))
+            st.altair_chart(chart + labels, width="stretch")
         with c2:
             st.caption("Best validation Accuracy (%)")
-            st.bar_chart(view.set_index("experiment")[["best_val_accuracy_pct"]], width="stretch")
+            ablation_acc = view.melt(id_vars="experiment", value_vars=["best_val_accuracy_pct"], var_name="Metric", value_name="Value")
+            chart = alt.Chart(ablation_acc).mark_bar().encode(
+                x=alt.X("experiment:N", title="Experiment", axis=alt.Axis(labelAngle=-25)),
+                y=alt.Y("Value:Q", title="Accuracy (%)", scale=alt.Scale(domain=[0, 100])),
+                color=alt.Color("Metric:N", legend=None),
+                tooltip=["experiment:N", alt.Tooltip("Value:Q", format=".2f")],
+            )
+            labels = alt.Chart(ablation_acc).mark_text(dy=-8).encode(x="experiment:N", y="Value:Q", text=alt.Text("Value:Q", format=".2f"))
+            st.altair_chart(chart + labels, width="stretch")
         st.dataframe(view[["experiment", "best_val_macro_f1", "best_val_accuracy_pct", "best_epoch"]], width="stretch", hide_index=True)
 
 
 def show_matrices(model_name):
-    CM = MODELS[model_name]["evaluation"] / "confusion_matrix.png"
-    CM_NORMALIZED = MODELS[model_name]["evaluation"] / "confusion_matrix_normalized.png"
-    st.subheader("Confusion Matrix")
-    c1, c2 = st.columns(2)
-    with c1:
-        if CM.exists():
-            st.image(str(CM), caption="Confusion Matrix - Test Set", width="stretch")
-    with c2:
-        if CM_NORMALIZED.exists():
-            st.image(str(CM_NORMALIZED), caption="Normalized Confusion Matrix", width="stretch")
+    predictions_path = MODELS[model_name]["evaluation"] / "test_predictions.csv"
+    st.subheader("Normalized Confusion Matrix")
+    st.caption("อ่านเป็นเปอร์เซ็นต์ตามคลาสจริงในแต่ละแถว · ตัวเลขในวงเล็บคือจำนวนภาพ")
+    if not predictions_path.exists():
+        st.warning("ไม่พบไฟล์ test_predictions.csv")
+        return
+    predictions = pd.read_csv(predictions_path)
+    labels = list(CLASS_NAMES)
+    counts = confusion_matrix(predictions.true_idx, predictions.pred_idx, labels=range(len(labels)))
+    row_totals = counts.sum(axis=1, keepdims=True)
+    normalized = counts / row_totals.clip(min=1)
+    matrix = pd.DataFrame(normalized, index=labels, columns=labels).reset_index(names="จริง")
+    long = matrix.melt(id_vars="จริง", var_name="ทำนาย", value_name="สัดส่วน")
+    count_long = pd.DataFrame(counts, index=labels, columns=labels).reset_index(names="จริง").melt(id_vars="จริง", var_name="ทำนาย", value_name="จำนวน")
+    long["จำนวน"] = count_long["จำนวน"]
+    long["ข้อความ"] = long.apply(lambda r: f"{r['สัดส่วน']:.1%}\n(n={int(r['จำนวน'])})", axis=1)
+    heatmap = alt.Chart(long).mark_rect().encode(
+        x=alt.X("ทำนาย:N", title="Predicted class", sort=labels),
+        y=alt.Y("จริง:N", title="True class", sort=labels),
+        color=alt.Color("สัดส่วน:Q", title="สัดส่วน", scale=alt.Scale(domain=[0, 1], scheme="viridis")),
+        tooltip=["จริง:N", "ทำนาย:N", alt.Tooltip("สัดส่วน:Q", format=".2%"), "จำนวน:Q"],
+    ).properties(height=420)
+    text = alt.Chart(long).mark_text(fontSize=13, color="white", lineBreak="\n").encode(
+        x=alt.X("ทำนาย:N", sort=labels), y=alt.Y("จริง:N", sort=labels), text="ข้อความ:N"
+    )
+    st.altair_chart(heatmap + text, width="stretch")
 
 
 def show_prediction(name, result):
@@ -189,7 +229,11 @@ def show_probability_comparison(results):
         color=alt.Color("โมเดล:N", scale=alt.Scale(domain=list(MODELS), range=["#60a5fa", "#34d399", "#f59e0b"]), legend=alt.Legend(orient="top", title=None)),
         tooltip=["โมเดล:N", "คลาส:N", alt.Tooltip("ความมั่นใจ:Q", format=".2%")],
     ).properties(height=220)
-    st.altair_chart(chart, width="stretch")
+    labels = alt.Chart(pd.DataFrame(rows)).mark_text(dx=5, align="left", color="white").encode(
+        y=alt.Y("คลาส:N", sort=[THAI_NAMES[x].split(" (")[0] for x in CLASS_NAMES]),
+        x="ความมั่นใจ:Q", yOffset="โมเดล:N", text=alt.Text("ความมั่นใจ:Q", format=".1%"),
+    )
+    st.altair_chart(chart + labels, width="stretch")
 
 
 st.title("🌿 Cassava Leaf Disease Classification")
@@ -241,7 +285,18 @@ with tab_compare:
     try:
         table = comparison_table()
         st.dataframe(table, width="stretch", hide_index=True)
-        st.bar_chart(table.set_index("Model")[["Accuracy", "Macro Precision", "Macro Recall", "Macro-F1"]])
+        comparison = table.melt(id_vars="Model", value_vars=["Accuracy", "Macro Precision", "Macro Recall", "Macro-F1"], var_name="Metric", value_name="Score")
+        bars = alt.Chart(comparison).mark_bar().encode(
+            x=alt.X("Model:N", title="Model"),
+            xOffset=alt.XOffset("Metric:N"),
+            y=alt.Y("Score:Q", title="Score (0–1)", scale=alt.Scale(domain=[0, 1])),
+            color=alt.Color("Metric:N", title="Metric"),
+            tooltip=["Model:N", "Metric:N", alt.Tooltip("Score:Q", format=".4f")],
+        )
+        labels = alt.Chart(comparison).mark_text(dy=-8, fontSize=11).encode(
+            x="Model:N", xOffset=alt.XOffset("Metric:N"), y="Score:Q", text=alt.Text("Score:Q", format=".4f"), color=alt.value("white")
+        )
+        st.altair_chart((bars + labels).properties(height=420), width="stretch")
         st.caption("คะแนนอยู่ในช่วง 0–1; Macro ให้แต่ละคลาสมีน้ำหนักเท่ากัน")
         st.info("เลือก checkpoint จาก Validation Macro-F1; คะแนน Test ใช้รายงานผล ไม่ใช้เลือก epoch")
         st.download_button("ดาวน์โหลดตารางเปรียบเทียบ (CSV)", table.to_csv(index=False).encode("utf-8-sig"), "model_comparison.csv", "text/csv")
@@ -251,6 +306,17 @@ with tab_compare:
         st.subheader("F1 รายคลาส")
         per_class = pd.DataFrame({name: pd.read_csv(config["evaluation"] / "test_metrics.csv").set_index("class")["f1"] for name, config in MODELS.items()})
         st.dataframe(per_class, width="stretch")
-        st.bar_chart(per_class)
+        per_class_long = per_class.reset_index().melt(id_vars="class", var_name="Model", value_name="F1")
+        per_class_long["class_label"] = per_class_long["class"].map(lambda x: THAI_NAMES.get(x, x).split(" (")[0])
+        bars = alt.Chart(per_class_long).mark_bar().encode(
+            x=alt.X("class_label:N", title="Class"), xOffset=alt.XOffset("Model:N"),
+            y=alt.Y("F1:Q", title="F1 score", scale=alt.Scale(domain=[0, 1])),
+            color=alt.Color("Model:N", title="Model"),
+            tooltip=["class:N", "Model:N", alt.Tooltip("F1:Q", format=".4f")],
+        )
+        labels = alt.Chart(per_class_long).mark_text(dy=-8, fontSize=10).encode(
+            x="class_label:N", xOffset=alt.XOffset("Model:N"), y="F1:Q", text=alt.Text("F1:Q", format=".4f"), color=alt.value("white")
+        )
+        st.altair_chart((bars + labels).properties(height=420), width="stretch")
     except (ValueError, FileNotFoundError) as exc:
         st.error(str(exc))
