@@ -304,18 +304,48 @@ with tab_compare:
         if chart.exists():
             st.download_button("ดาวน์โหลดกราฟเปรียบเทียบ (PNG)", chart.read_bytes(), chart.name, "image/png")
         st.subheader("F1 รายคลาส")
-        per_class = pd.DataFrame({name: pd.read_csv(config["evaluation"] / "test_metrics.csv").set_index("class")["f1"] for name, config in MODELS.items()})
-        st.dataframe(per_class, width="stretch")
-        per_class_long = per_class.reset_index().melt(id_vars="class", var_name="Model", value_name="F1")
-        per_class_long["class_label"] = per_class_long["class"].map(lambda x: THAI_NAMES.get(x, x).split(" (")[0])
+        metric_rows = []
+        for name, config in MODELS.items():
+            metrics = pd.read_csv(config["evaluation"] / "test_metrics.csv")
+            metrics["Model"] = name
+            metric_rows.append(metrics)
+        class_metrics = pd.concat(metric_rows, ignore_index=True)
+        class_metrics["Class"] = class_metrics["class"].map(lambda x: THAI_NAMES.get(x, x).split(" (")[0])
+        class_metrics = class_metrics.rename(columns={"precision": "Precision", "recall": "Recall", "f1": "F1", "support": "Test Support"})
+        detail = class_metrics[["Model", "Class", "Precision", "Recall", "F1", "Test Support"]].copy()
+        st.caption("ตารางรายละเอียดผลของทุกโมเดลและทุกคลาส")
+        st.dataframe(
+            detail.style.format({"Precision": "{:.4f}", "Recall": "{:.4f}", "F1": "{:.4f}"}),
+            width="stretch", hide_index=True,
+        )
+
+        summary_rows = []
+        for class_name, group in detail.groupby("Class", sort=False):
+            best = group.loc[group["F1"].idxmax()]
+            worst = group.loc[group["F1"].idxmin()]
+            summary_rows.append({
+                "Class": class_name,
+                "Best model": best["Model"], "Best F1": best["F1"],
+                "Worst model": worst["Model"], "Worst F1": worst["F1"],
+                "Test Support": int(group["Test Support"].iloc[0]),
+            })
+        summary = pd.DataFrame(summary_rows)
+        st.caption("สรุปคลาสที่ทำได้ดีที่สุดและแย่ที่สุด")
+        st.dataframe(
+            summary.style.format({"Best F1": "{:.4f}", "Worst F1": "{:.4f}"}),
+            width="stretch", hide_index=True,
+        )
+
+        per_class = detail.pivot(index="Class", columns="Model", values="F1")
+        per_class_long = detail[["Class", "Model", "F1"]].copy()
         bars = alt.Chart(per_class_long).mark_bar().encode(
-            x=alt.X("class_label:N", title="Class"), xOffset=alt.XOffset("Model:N"),
+            x=alt.X("Class:N", title="Class"), xOffset=alt.XOffset("Model:N"),
             y=alt.Y("F1:Q", title="F1 score", scale=alt.Scale(domain=[0, 1])),
             color=alt.Color("Model:N", title="Model"),
             tooltip=["class:N", "Model:N", alt.Tooltip("F1:Q", format=".4f")],
         )
         labels = alt.Chart(per_class_long).mark_text(dy=-8, fontSize=10).encode(
-            x="class_label:N", xOffset=alt.XOffset("Model:N"), y="F1:Q", text=alt.Text("F1:Q", format=".4f"), color=alt.value("white")
+            x="Class:N", xOffset=alt.XOffset("Model:N"), y="F1:Q", text=alt.Text("F1:Q", format=".4f"), color=alt.value("white")
         )
         st.altair_chart((bars + labels).properties(height=420), width="stretch")
     except (ValueError, FileNotFoundError) as exc:
